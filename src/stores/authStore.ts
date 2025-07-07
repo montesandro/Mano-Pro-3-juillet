@@ -127,27 +127,43 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         return false;
       }
 
-      // Create user profile in users table
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email: userData.email!,
-          first_name: userData.firstName!,
-          last_name: userData.lastName!,
-          phone: userData.phone!,
-          company: userData.company!,
-          role: userData.role!,
-          is_verified: false,
-          is_certified: userData.role === 'artisan' ? false : null,
-          arrondissements: userData.arrondissements || null,
-          trades: userData.trades || null,
-          completed_projects: 0
-        });
+      // Wait a moment for the trigger to create the user profile
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      if (profileError) {
-        console.error('Registration profile error:', profileError.message || profileError);
-        // Clean up auth user if profile creation failed
+      // Get user profile created by the handle_new_user trigger
+      try {
+        const userProfile = await getUserProfile(authData.user.id);
+        
+        // Update profile with additional data if needed
+        if (userData.arrondissements || userData.trades) {
+          const updateData: any = {};
+          if (userData.arrondissements) updateData.arrondissements = userData.arrondissements;
+          if (userData.trades) updateData.trades = userData.trades;
+          
+          const { error: updateError } = await supabase
+            .from('users')
+            .update(updateData)
+            .eq('id', authData.user.id);
+
+          if (updateError) {
+            console.error('Error updating user profile:', updateError);
+          }
+        }
+
+        // Transform database fields to application format
+        const user = transformDatabaseUser(userProfile);
+        
+        set({ 
+          user, 
+          isAuthenticated: true, 
+          isLoading: false 
+        });
+        
+        localStorage.setItem('mano-pro-user', JSON.stringify(user));
+        return true;
+      } catch (profileError) {
+        console.error('Error fetching user profile after registration:', profileError);
+        // Clean up auth user if profile fetch failed
         try {
           await supabase.auth.signOut();
         } catch (cleanupError) {
@@ -156,6 +172,12 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         set({ isLoading: false });
         return false;
       }
+    } catch (error) {
+      console.error('Registration error:', error instanceof Error ? error.message : error);
+      set({ isLoading: false });
+      return false;
+    }
+  },
 
       // Create user object for state
       const newUser: User = {
