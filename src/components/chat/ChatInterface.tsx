@@ -2,7 +2,7 @@
 // Real-time messaging between gestionnaires and artisans
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Image, Clock } from 'lucide-react';
+import { Send, Paperclip, Image, Clock, Loader2 } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useAuthStore } from '../../stores/authStore';
 import { Button } from '../ui/Button';
@@ -15,13 +15,29 @@ interface ChatInterfaceProps {
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ projectId, className }) => {
   const { user } = useAuthStore();
-  const { sendMessage, getMessagesByProject, markMessagesAsRead, isLoading } = useProjectStore();
+  const { sendMessage, getMessagesByProject, markMessagesAsRead, loadMessagesByProject, isLoading } = useProjectStore();
   
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const messages = getMessagesByProject(projectId);
+
+  useEffect(() => {
+    const loadMessages = async () => {
+      setIsLoadingMessages(true);
+      try {
+        await loadMessagesByProject(projectId);
+      } catch (error) {
+        console.error('Error loading messages:', error);
+      } finally {
+        setIsLoadingMessages(false);
+      }
+    };
+
+    loadMessages();
+  }, [projectId, loadMessagesByProject]);
 
   useEffect(() => {
     if (user) {
@@ -37,14 +53,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ projectId, classNa
     if (!message.trim() && attachments.length === 0) return;
     if (!user) return;
 
-    const photoUrls = attachments.map(file => URL.createObjectURL(file));
-    
     await sendMessage(
       projectId,
       user.id,
       `${user.firstName} ${user.lastName}`,
       message,
-      photoUrls.length > 0 ? photoUrls : undefined
+      attachments.length > 0 ? attachments : undefined
     );
     
     setMessage('');
@@ -108,7 +122,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ projectId, classNa
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
+        {isLoadingMessages ? (
+          <div className="flex flex-col items-center justify-center py-8 space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            <p className="text-gray-600 dark:text-gray-400 text-sm">
+              Chargement des messages...
+            </p>
+          </div>
+        ) : messages.length === 0 ? (
           <div className="text-center py-8">
             <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
               <Send className="h-8 w-8 text-gray-400" />

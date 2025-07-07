@@ -9,16 +9,18 @@ import {
   Camera, 
   CreditCard, 
   AlertTriangle,
-  User
+  User,
+  Loader2
 } from 'lucide-react';
 import { Project, ProjectTimelineEntry } from '../../types';
 
 interface ProjectTimelineProps {
   project: Project;
   className?: string;
+  isLoading?: boolean;
 }
 
-export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, className }) => {
+export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, className, isLoading = false }) => {
   const getTimelineIcon = (type: string) => {
     switch (type) {
       case 'status_change':
@@ -75,7 +77,14 @@ export const ProjectTimeline: React.FC<ProjectTimelineProps> = ({ project, class
       </h3>
       
       <div className="space-y-6">
-        {project.timeline.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-8 space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            <p className="text-gray-600 dark:text-gray-400 text-sm">
+              Chargement de l'historique...
+            </p>
+          </div>
+        ) : project.timeline.length === 0 ? (
           <div className="text-center py-8">
             <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 dark:text-gray-400">

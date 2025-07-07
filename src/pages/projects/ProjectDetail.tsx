@@ -1,7 +1,7 @@
 // Project detail page with chat, timeline, and management tools
 // Complete project management interface for both gestionnaires and artisans
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -12,7 +12,8 @@ import {
   Upload,
   CheckCircle,
   CreditCard,
-  Star
+  Star,
+  Loader2
 } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -32,6 +33,9 @@ export const ProjectDetail: React.FC = () => {
     updateProjectStatus, 
     uploadProjectPhotos, 
     createPaymentRequest,
+    loadProjectById,
+    loadMessagesByProject,
+    loadProjectTimeline,
     isLoading 
   } = useProjectStore();
   
@@ -42,17 +46,65 @@ export const ProjectDetail: React.FC = () => {
   const [photos, setPhotos] = useState<File[]>([]);
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState('');
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const project = id ? getProjectById(id) : undefined;
 
+  useEffect(() => {
+    const loadProjectData = async () => {
+      if (id) {
+        setIsInitialLoading(true);
+        try {
+          await Promise.all([
+            loadProjectById(id),
+            loadMessagesByProject(id),
+            loadProjectTimeline(id)
+          ]);
+        } catch (error) {
+          console.error('Error loading project data:', error);
+        } finally {
+          setIsInitialLoading(false);
+        }
+      }
+    };
+
+    loadProjectData();
+  }, [id, loadProjectById, loadMessagesByProject, loadProjectTimeline]);
+
+  if (isInitialLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-500" />
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Chargement du projet
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Récupération des données du projet...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!project) {
     return (
-      <div className="text-center py-12">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Projet non trouvé</h1>
-        <Button onClick={() => navigate(-1)} className="mt-4">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Retour
-        </Button>
+      <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
+        <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
+          <Clock className="h-8 w-8 text-red-600 dark:text-red-400" />
+        </div>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+            Projet non trouvé
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Le projet demandé n'existe pas ou vous n'avez pas l'autorisation de le voir.
+          </p>
+          <Button onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Retour
+          </Button>
+        </div>
       </div>
     );
   }
@@ -300,7 +352,7 @@ export const ProjectDetail: React.FC = () => {
 
         {/* Right Column - Timeline */}
         <div>
-          <ProjectTimeline project={project} />
+          <ProjectTimeline project={project} isLoading={isLoading} />
         </div>
       </div>
 

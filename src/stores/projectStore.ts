@@ -465,6 +465,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   loadMessagesByProject: async (projectId) => {
+    set({ isLoading: true });
     try {
       const { data, error } = await supabase
         .from('chat_messages')
@@ -480,11 +481,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         messages: [
           ...state.messages.filter(m => m.projectId !== projectId),
           ...messages
-        ]
+        ],
+        isLoading: false
       }));
     } catch (error) {
       console.error('Load messages error:', error);
-      throw error;
+      set({ isLoading: false });
     }
   },
 
