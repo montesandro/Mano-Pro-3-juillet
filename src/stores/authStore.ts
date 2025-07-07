@@ -82,14 +82,20 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isLoading: true });
     
     try {
-      // First check if user already exists
-      const { data: existingUser } = await supabase
+      // Check if user already exists - use limit(1) to avoid 406 error when no user found
+      const { data: existingUsers, error: checkError } = await supabase
         .from('users')
         .select('email')
         .eq('email', userData.email!)
-        .single();
+        .limit(1);
 
-      if (existingUser) {
+      if (checkError) {
+        console.error('Error checking existing user:', checkError);
+        set({ isLoading: false });
+        return false;
+      }
+
+      if (existingUsers && existingUsers.length > 0) {
         console.error('User already exists with this email');
         set({ isLoading: false });
         return false;
@@ -120,9 +126,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         set({ isLoading: false });
         return false;
       }
-
-      // Wait a moment for auth user to be fully created
-      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Create user profile in users table
       const { error: profileError } = await supabase
