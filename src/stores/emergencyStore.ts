@@ -1,8 +1,9 @@
-// Emergency management store
-// Handles emergency creation, proposals, and project management
+// Emergency management store with Supabase integration
+// Handles emergency creation, proposals, and project management with real database operations
 
 import { create } from 'zustand';
-import { Emergency, Proposal, Project, EmergencyStatus, ProposalStatus } from '../types';
+import { Emergency, Proposal, Project, EmergencyStatus, ProposalStatus, User } from '../types';
+import { supabase, handleSupabaseError } from '../lib/supabase';
 
 interface EmergencyStore {
   emergencies: Emergency[];
@@ -12,105 +13,82 @@ interface EmergencyStore {
   
   // Emergency actions
   createEmergency: (emergency: Omit<Emergency, 'id' | 'createdAt' | 'status'>) => Promise<string>;
-  updateEmergencyStatus: (id: string, status: EmergencyStatus) => void;
+  updateEmergencyStatus: (id: string, status: EmergencyStatus) => Promise<void>;
   getEmergenciesByUser: (userId: string) => Emergency[];
   getEmergencyById: (id: string) => Emergency | undefined;
+  loadEmergenciesByUser: (userId: string) => Promise<void>;
+  loadEmergencyById: (id: string) => Promise<void>;
   
   // Proposal actions
   createProposal: (proposal: Omit<Proposal, 'id' | 'createdAt' | 'status'>) => Promise<string>;
-  updateProposalStatus: (id: string, status: ProposalStatus) => void;
+  updateProposalStatus: (id: string, status: ProposalStatus) => Promise<void>;
   getProposalsByEmergency: (emergencyId: string) => Proposal[];
   getProposalsByArtisan: (artisanId: string) => Proposal[];
+  loadProposalsByEmergency: (emergencyId: string) => Promise<void>;
+  loadProposalsByArtisan: (artisanId: string) => Promise<void>;
   
   // Project actions
   createProject: (emergencyId: string, proposalId: string) => Promise<string>;
-  updateProjectStatus: (id: string, status: string) => void;
+  updateProjectStatus: (id: string, status: string) => Promise<void>;
   getProjectsByUser: (userId: string, role: string) => Project[];
-  
-  // Initialize with mock data
-  initializeMockData: () => void;
+  loadProjectsByUser: (userId: string, role: string) => Promise<void>;
 }
 
-// Mock data for development
-const mockEmergencies: Emergency[] = [
-  {
-    id: '1',
-    title: 'Fuite d\'eau urgente - Cuisine',
-    description: 'Fuite importante sous l\'évier de la cuisine. L\'eau s\'accumule rapidement et risque d\'endommager le parquet.',
-    address: '15 Rue de Rivoli, 75001 Paris',
-    arrondissement: 1,
-    trade: 'Plomberie',
-    maxBudget: 300,
-    status: 'open',
-    createdBy: '1',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-    photos: [
-      'https://images.pexels.com/photos/1108572/pexels-photo-1108572.jpeg',
-      'https://images.pexels.com/photos/1108101/pexels-photo-1108101.jpeg'
-    ],
-    urgencyLevel: 'high'
-  },
-  {
-    id: '2',
-    title: 'Panne électrique - Hall d\'entrée',
-    description: 'Plus d\'électricité dans le hall d\'entrée et les parties communes. Problème au niveau du tableau électrique.',
-    address: '42 Avenue des Champs-Élysées, 75008 Paris',
-    arrondissement: 8,
-    trade: 'Électricité',
-    maxBudget: 500,
-    status: 'in_progress',
-    createdBy: '1',
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-    photos: [
-      'https://images.pexels.com/photos/257736/pexels-photo-257736.jpeg'
-    ],
-    urgencyLevel: 'critical',
-    acceptedProposalId: '2'
-  },
-  {
-    id: '3',
-    title: 'Serrure bloquée - Porte d\'entrée',
-    description: 'La serrure de la porte d\'entrée principale est complètement bloquée. Les résidents ne peuvent plus accéder à l\'immeuble.',
-    address: '28 Rue de la Paix, 75002 Paris',
-    arrondissement: 2,
-    trade: 'Serrurerie',
-    maxBudget: 200,
-    status: 'completed',
-    createdBy: '1',
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-    photos: [],
-    urgencyLevel: 'critical'
-  }
-];
+// Helper function to transform database emergency to application format
+const transformEmergency = (dbEmergency: any): Emergency => ({
+  id: dbEmergency.id,
+  title: dbEmergency.title,
+  description: dbEmergency.description,
+  address: dbEmergency.address,
+  arrondissement: dbEmergency.arrondissement,
+  trade: dbEmergency.trade,
+  maxBudget: dbEmergency.max_budget,
+  status: dbEmergency.status,
+  createdBy: dbEmergency.created_by,
+  createdAt: new Date(dbEmergency.created_at),
+  photos: dbEmergency.photos || [],
+  urgencyLevel: dbEmergency.urgency_level,
+  acceptedProposalId: dbEmergency.accepted_proposal_id
+});
 
-const mockProposals: Proposal[] = [
-  {
-    id: '1',
-    emergencyId: '1',
-    artisanId: '2',
-    artisanName: 'Pierre Martin',
-    artisanCompany: 'Plomberie Martin',
-    artisanRating: 4.8,
-    price: 250,
-    description: 'Intervention rapide pour réparer la fuite. Remplacement du joint défaillant et vérification de l\'installation.',
-    estimatedDuration: '2 heures',
-    status: 'pending',
-    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000) // 1 hour ago
-  },
-  {
-    id: '2',
-    emergencyId: '2',
-    artisanId: '2',
-    artisanName: 'Pierre Martin',
-    artisanCompany: 'Plomberie Martin',
-    artisanRating: 4.8,
-    price: 450,
-    description: 'Diagnostic complet du tableau électrique et réparation du défaut. Remise aux normes si nécessaire.',
-    estimatedDuration: '4 heures',
-    status: 'accepted',
-    createdAt: new Date(Date.now() - 20 * 60 * 60 * 1000) // 20 hours ago
-  }
-];
+// Helper function to transform database proposal to application format
+const transformProposal = (dbProposal: any): Proposal => ({
+  id: dbProposal.id,
+  emergencyId: dbProposal.emergency_id,
+  artisanId: dbProposal.artisan_id,
+  artisanName: dbProposal.artisan_name,
+  artisanCompany: dbProposal.artisan_company,
+  artisanRating: dbProposal.artisan_rating || 0,
+  price: dbProposal.price,
+  description: dbProposal.description,
+  estimatedDuration: dbProposal.estimated_duration,
+  status: dbProposal.status,
+  createdAt: new Date(dbProposal.created_at)
+});
+
+// Helper function to transform database user to application format
+const transformUser = (dbUser: any): User => ({
+  id: dbUser.id,
+  email: dbUser.email,
+  firstName: dbUser.first_name,
+  lastName: dbUser.last_name,
+  phone: dbUser.phone,
+  company: dbUser.company,
+  role: dbUser.role,
+  isVerified: dbUser.is_verified,
+  isCertified: dbUser.is_certified,
+  createdAt: new Date(dbUser.created_at),
+  arrondissements: dbUser.arrondissements,
+  trades: dbUser.trades,
+  rating: dbUser.rating,
+  completedProjects: dbUser.completed_projects,
+  avatar: dbUser.avatar,
+  bankDetails: dbUser.bank_details_iban ? {
+    iban: dbUser.bank_details_iban,
+    bic: dbUser.bank_details_bic || '',
+    accountHolder: dbUser.bank_details_account_holder || ''
+  } : undefined
+});
 
 export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
   emergencies: [],
@@ -121,30 +99,64 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
   createEmergency: async (emergencyData) => {
     set({ isLoading: true });
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const newEmergency: Emergency = {
-      ...emergencyData,
-      id: Date.now().toString(),
-      createdAt: new Date(),
-      status: 'open'
-    };
-    
-    set(state => ({
-      emergencies: [newEmergency, ...state.emergencies],
-      isLoading: false
-    }));
-    
-    return newEmergency.id;
+    try {
+      const { data, error } = await supabase
+        .from('emergencies')
+        .insert({
+          title: emergencyData.title,
+          description: emergencyData.description,
+          address: emergencyData.address,
+          arrondissement: emergencyData.arrondissement,
+          trade: emergencyData.trade,
+          max_budget: emergencyData.maxBudget,
+          urgency_level: emergencyData.urgencyLevel,
+          created_by: emergencyData.createdBy,
+          photos: emergencyData.photos || []
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Create emergency error:', error);
+        throw error;
+      }
+
+      const newEmergency = transformEmergency(data);
+      
+      set(state => ({
+        emergencies: [newEmergency, ...state.emergencies],
+        isLoading: false
+      }));
+      
+      return newEmergency.id;
+    } catch (error) {
+      console.error('Create emergency error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
   },
 
-  updateEmergencyStatus: (id, status) => {
-    set(state => ({
-      emergencies: state.emergencies.map(emergency =>
-        emergency.id === id ? { ...emergency, status } : emergency
-      )
-    }));
+  updateEmergencyStatus: async (id, status) => {
+    try {
+      const { error } = await supabase
+        .from('emergencies')
+        .update({ status })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Update emergency status error:', error);
+        throw error;
+      }
+
+      set(state => ({
+        emergencies: state.emergencies.map(emergency =>
+          emergency.id === id ? { ...emergency, status } : emergency
+        )
+      }));
+    } catch (error) {
+      console.error('Update emergency status error:', error);
+      throw error;
+    }
   },
 
   getEmergenciesByUser: (userId) => {
@@ -155,42 +167,132 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
     return get().emergencies.find(emergency => emergency.id === id);
   },
 
+  loadEmergenciesByUser: async (userId) => {
+    set({ isLoading: true });
+    
+    try {
+      const { data, error } = await supabase
+        .from('emergencies')
+        .select('*')
+        .eq('created_by', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Load emergencies error:', error);
+        throw error;
+      }
+
+      const emergencies = data.map(transformEmergency);
+      
+      set(state => ({
+        emergencies: emergencies,
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Load emergencies error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  loadEmergencyById: async (id) => {
+    set({ isLoading: true });
+    
+    try {
+      const { data, error } = await supabase
+        .from('emergencies')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Load emergency error:', error);
+        throw error;
+      }
+
+      const emergency = transformEmergency(data);
+      
+      set(state => ({
+        emergencies: state.emergencies.some(e => e.id === id)
+          ? state.emergencies.map(e => e.id === id ? emergency : e)
+          : [...state.emergencies, emergency],
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Load emergency error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
   createProposal: async (proposalData) => {
     set({ isLoading: true });
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const newProposal: Proposal = {
-      ...proposalData,
-      id: Date.now().toString(),
-      createdAt: new Date(),
-      status: 'pending'
-    };
-    
-    set(state => ({
-      proposals: [newProposal, ...state.proposals],
-      isLoading: false
-    }));
-    
-    return newProposal.id;
+    try {
+      const { data, error } = await supabase
+        .from('proposals')
+        .insert({
+          emergency_id: proposalData.emergencyId,
+          artisan_id: proposalData.artisanId,
+          artisan_name: proposalData.artisanName,
+          artisan_company: proposalData.artisanCompany,
+          artisan_rating: proposalData.artisanRating,
+          price: proposalData.price,
+          description: proposalData.description,
+          estimated_duration: proposalData.estimatedDuration
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Create proposal error:', error);
+        throw error;
+      }
+
+      const newProposal = transformProposal(data);
+      
+      set(state => ({
+        proposals: [newProposal, ...state.proposals],
+        isLoading: false
+      }));
+      
+      return newProposal.id;
+    } catch (error) {
+      console.error('Create proposal error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
   },
 
-  updateProposalStatus: (id, status) => {
-    set(state => ({
-      proposals: state.proposals.map(proposal =>
-        proposal.id === id ? { ...proposal, status } : proposal
-      )
-    }));
-    
-    // If proposal is accepted, update emergency status
-    if (status === 'accepted') {
-      const proposal = get().proposals.find(p => p.id === id);
-      if (proposal) {
-        get().updateEmergencyStatus(proposal.emergencyId, 'in_progress');
-        // Create project
-        get().createProject(proposal.emergencyId, id);
+  updateProposalStatus: async (id, status) => {
+    try {
+      const { error } = await supabase
+        .from('proposals')
+        .update({ status })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Update proposal status error:', error);
+        throw error;
       }
+
+      set(state => ({
+        proposals: state.proposals.map(proposal =>
+          proposal.id === id ? { ...proposal, status } : proposal
+        )
+      }));
+      
+      // If proposal is accepted, update emergency status and create project
+      if (status === 'accepted') {
+        const proposal = get().proposals.find(p => p.id === id);
+        if (proposal) {
+          await get().updateEmergencyStatus(proposal.emergencyId, 'in_progress');
+          await get().createProject(proposal.emergencyId, id);
+        }
+      }
+    } catch (error) {
+      console.error('Update proposal status error:', error);
+      throw error;
     }
   },
 
@@ -202,48 +304,251 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
     return get().proposals.filter(proposal => proposal.artisanId === artisanId);
   },
 
-  createProject: async (emergencyId, proposalId) => {
-    const emergency = get().getEmergencyById(emergencyId);
-    const proposal = get().proposals.find(p => p.id === proposalId);
+  loadProposalsByEmergency: async (emergencyId) => {
+    set({ isLoading: true });
     
-    if (!emergency || !proposal) return '';
-    
-    const newProject: Project = {
-      id: Date.now().toString(),
-      emergencyId,
-      proposalId,
-      gestionnaire: { id: emergency.createdBy } as User, // Will be populated with full user data
-      artisan: { id: proposal.artisanId } as User, // Will be populated with full user data
-      title: emergency.title,
-      description: emergency.description,
-      address: emergency.address,
-      price: proposal.price,
-      status: 'accepted',
-      photos: { before: [], during: [], after: [] },
-      timeline: [
-        {
-          id: Date.now().toString(),
-          type: 'status_change',
-          message: 'Projet accepté et démarré',
-          author: 'System',
-          timestamp: new Date()
-        }
-      ]
-    };
-    
-    set(state => ({
-      projects: [newProject, ...state.projects]
-    }));
-    
-    return newProject.id;
+    try {
+      const { data, error } = await supabase
+        .from('proposals')
+        .select('*')
+        .eq('emergency_id', emergencyId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Load proposals error:', error);
+        throw error;
+      }
+
+      const proposals = data.map(transformProposal);
+      
+      set(state => ({
+        proposals: [
+          ...state.proposals.filter(p => p.emergencyId !== emergencyId),
+          ...proposals
+        ],
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Load proposals error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
   },
 
-  updateProjectStatus: (id, status) => {
-    set(state => ({
-      projects: state.projects.map(project =>
-        project.id === id ? { ...project, status: status as ProjectStatus } : project
-      )
-    }));
+  loadProposalsByArtisan: async (artisanId) => {
+    set({ isLoading: true });
+    
+    try {
+      const { data, error } = await supabase
+        .from('proposals')
+        .select('*')
+        .eq('artisan_id', artisanId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Load proposals error:', error);
+        throw error;
+      }
+
+      const proposals = data.map(transformProposal);
+      
+      set(state => ({
+        proposals: [
+          ...state.proposals.filter(p => p.artisanId !== artisanId),
+          ...proposals
+        ],
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Load proposals error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  createProject: async (emergencyId, proposalId) => {
+    try {
+      // Get emergency and proposal details
+      const { data: emergencyData, error: emergencyError } = await supabase
+        .from('emergencies')
+        .select('*')
+        .eq('id', emergencyId)
+        .single();
+
+      if (emergencyError) {
+        console.error('Error fetching emergency:', emergencyError);
+        throw emergencyError;
+      }
+
+      const { data: proposalData, error: proposalError } = await supabase
+        .from('proposals')
+        .select('*')
+        .eq('id', proposalId)
+        .single();
+
+      if (proposalError) {
+        console.error('Error fetching proposal:', proposalError);
+        throw proposalError;
+      }
+
+      // Get complete user profiles for gestionnaire and artisan
+      const { data: gestionnaireData, error: gestionnaireError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', emergencyData.created_by)
+        .single();
+
+      if (gestionnaireError) {
+        console.error('Error fetching gestionnaire:', gestionnaireError);
+        throw gestionnaireError;
+      }
+
+      const { data: artisanData, error: artisanError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', proposalData.artisan_id)
+        .single();
+
+      if (artisanError) {
+        console.error('Error fetching artisan:', artisanError);
+        throw artisanError;
+      }
+
+      // Create project in database
+      const { data: projectData, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          emergency_id: emergencyId,
+          proposal_id: proposalId,
+          gestionnaire_id: emergencyData.created_by,
+          artisan_id: proposalData.artisan_id,
+          title: emergencyData.title,
+          description: emergencyData.description,
+          address: emergencyData.address,
+          price: proposalData.price,
+          status: 'accepted'
+        })
+        .select()
+        .single();
+
+      if (projectError) {
+        console.error('Error creating project:', projectError);
+        throw projectError;
+      }
+
+      // Create initial timeline entry
+      await supabase
+        .from('project_timeline_entries')
+        .insert({
+          project_id: projectData.id,
+          type: 'status_change',
+          message: 'Projet accepté et démarré',
+          author: 'System'
+        });
+
+      // Transform users and create project object
+      const gestionnaire = transformUser(gestionnaireData);
+      const artisan = transformUser(artisanData);
+
+      const newProject: Project = {
+        id: projectData.id,
+        emergencyId,
+        proposalId,
+        gestionnaire,
+        artisan,
+        title: projectData.title,
+        description: projectData.description,
+        address: projectData.address,
+        price: projectData.price,
+        status: projectData.status,
+        startDate: projectData.start_date ? new Date(projectData.start_date) : undefined,
+        completedDate: projectData.completed_date ? new Date(projectData.completed_date) : undefined,
+        photos: {
+          before: projectData.photos_before || [],
+          during: projectData.photos_during || [],
+          after: projectData.photos_after || []
+        },
+        timeline: [
+          {
+            id: Date.now().toString(),
+            type: 'status_change',
+            message: 'Projet accepté et démarré',
+            author: 'System',
+            timestamp: new Date()
+          }
+        ],
+        rating: projectData.rating,
+        review: projectData.review
+      };
+      
+      set(state => ({
+        projects: [newProject, ...state.projects]
+      }));
+      
+      return newProject.id;
+    } catch (error) {
+      console.error('Create project error:', error);
+      throw error;
+    }
+  },
+
+  updateProjectStatus: async (id, status) => {
+    try {
+      const updateData: any = { status };
+      
+      if (status === 'completed') {
+        updateData.completed_date = new Date().toISOString();
+      }
+
+      const { error } = await supabase
+        .from('projects')
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) {
+        console.error('Update project status error:', error);
+        throw error;
+      }
+
+      // Add timeline entry
+      await supabase
+        .from('project_timeline_entries')
+        .insert({
+          project_id: id,
+          type: 'status_change',
+          message: `Statut changé vers: ${status}`,
+          author: 'System'
+        });
+
+      set(state => ({
+        projects: state.projects.map(project => {
+          if (project.id === id) {
+            const updatedProject = { ...project, status: status as any };
+            
+            if (status === 'completed') {
+              updatedProject.completedDate = new Date();
+            }
+            
+            // Add timeline entry to local state
+            const timelineEntry = {
+              id: Date.now().toString(),
+              type: 'status_change' as const,
+              message: `Statut changé vers: ${status}`,
+              author: 'System',
+              timestamp: new Date()
+            };
+            
+            updatedProject.timeline = [...project.timeline, timelineEntry];
+            
+            return updatedProject;
+          }
+          return project;
+        })
+      }));
+    } catch (error) {
+      console.error('Update project status error:', error);
+      throw error;
+    }
   },
 
   getProjectsByUser: (userId, role) => {
@@ -252,13 +557,58 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
     );
   },
 
-  initializeMockData: () => {
-    set({
-      emergencies: mockEmergencies,
-      proposals: mockProposals
-    });
+  loadProjectsByUser: async (userId, role) => {
+    set({ isLoading: true });
+    
+    try {
+      const column = role === 'gestionnaire' ? 'gestionnaire_id' : 'artisan_id';
+      
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          gestionnaire:gestionnaire_id(*),
+          artisan:artisan_id(*)
+        `)
+        .eq(column, userId)
+        .order('start_date', { ascending: false });
+
+      if (error) {
+        console.error('Load projects error:', error);
+        throw error;
+      }
+
+      const projects: Project[] = data.map(projectData => ({
+        id: projectData.id,
+        emergencyId: projectData.emergency_id,
+        proposalId: projectData.proposal_id,
+        gestionnaire: transformUser(projectData.gestionnaire),
+        artisan: transformUser(projectData.artisan),
+        title: projectData.title,
+        description: projectData.description,
+        address: projectData.address,
+        price: projectData.price,
+        status: projectData.status,
+        startDate: projectData.start_date ? new Date(projectData.start_date) : undefined,
+        completedDate: projectData.completed_date ? new Date(projectData.completed_date) : undefined,
+        photos: {
+          before: projectData.photos_before || [],
+          during: projectData.photos_during || [],
+          after: projectData.photos_after || []
+        },
+        timeline: [], // Will be loaded separately if needed
+        rating: projectData.rating,
+        review: projectData.review
+      }));
+      
+      set(state => ({
+        projects: projects,
+        isLoading: false
+      }));
+    } catch (error) {
+      console.error('Load projects error:', error);
+      set({ isLoading: false });
+      throw error;
+    }
   }
 }));
-
-// Initialize mock data
-useEmergencyStore.getState().initializeMockData();
