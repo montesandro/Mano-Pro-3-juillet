@@ -78,132 +78,71 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     localStorage.removeItem('mano-pro-user');
   },
 
-  register: async (userData) => {
-    set({ isLoading: true });
-    
-    try {
-      // Check if user already exists - use limit(1) to avoid 406 error when no user found
-      const { data: existingUsers, error: checkError } = await supabase
-        .from('users')
-        .select('email')
-        .eq('email', userData.email!)
-        .limit(1);
+register: async (userData) => {
+  set({ isLoading: true });
 
-      if (checkError) {
-        console.error('Error checking existing user:', checkError);
-        set({ isLoading: false });
-        return false;
-      }
+  try {
+    // 1. Crée le compte dans Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: userData.email!,
+      password: userData.password
+    });
 
-      if (existingUsers && existingUsers.length > 0) {
-        console.error('User already exists with this email');
-        set({ isLoading: false });
-        return false;
-      }
-
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: userData.email!,
-        password: userData.password,
-        options: {
-          emailRedirectTo: undefined, // Disable email confirmation for now
-          data: {
-            first_name: userData.firstName,
-            last_name: userData.lastName,
-            role: userData.role
-          }
-        }
-      });
-
-      if (authError) {
-        console.error('Registration auth error:', authError.message || authError);
-        set({ isLoading: false });
-        return false;
-      }
-
-      if (!authData.user) {
-        console.error('No user returned from auth signup');
-        set({ isLoading: false });
-        return false;
-      }
-
-      // Wait a moment for the trigger to create the user profile
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Get user profile created by the handle_new_user trigger
-      try {
-        const userProfile = await getUserProfile(authData.user.id);
-        
-        // Update profile with additional data if needed
-        if (userData.arrondissements || userData.trades) {
-          const updateData: any = {};
-          if (userData.arrondissements) updateData.arrondissements = userData.arrondissements;
-          if (userData.trades) updateData.trades = userData.trades;
-          
-          const { error: updateError } = await supabase
-            .from('users')
-            .update(updateData)
-            .eq('id', authData.user.id);
-
-          if (updateError) {
-            console.error('Error updating user profile:', updateError);
-          }
-        }
-
-        // Transform database fields to application format
-        const user = transformDatabaseUser(userProfile);
-        
-        set({ 
-          user, 
-          isAuthenticated: true, 
-          isLoading: false 
-        });
-        
-        localStorage.setItem('mano-pro-user', JSON.stringify(user));
-        return true;
-      } catch (profileError) {
-        console.error('Error fetching user profile after registration:', profileError);
-        // Clean up auth user if profile fetch failed
-        try {
-          await supabase.auth.signOut();
-        } catch (cleanupError) {
-          console.error('Error during cleanup:', cleanupError);
-        }
-        set({ isLoading: false });
-        return false;
-      }
-
-      // Create user object for state
-      const newUser: User = {
-        id: authData.user.id,
-        email: userData.email!,
-        firstName: userData.firstName!,
-        lastName: userData.lastName!,
-        phone: userData.phone!,
-        company: userData.company!,
-        role: userData.role!,
-        isVerified: false,
-        isCertified: userData.role === 'artisan' ? false : undefined,
-        createdAt: new Date(),
-        arrondissements: userData.arrondissements,
-        trades: userData.trades,
-        completedProjects: 0
-      };
-      
-      set({ 
-        user: newUser, 
-        isAuthenticated: true, 
-        isLoading: false 
-      });
-      
-      localStorage.setItem('mano-pro-user', JSON.stringify(newUser));
-      return true;
-    } catch (error) {
-      console.error('Registration error:', error instanceof Error ? error.message : error);
+    if (authError || !authData.user) {
+      console.error('Erreur création auth.user :', authError);
       set({ isLoading: false });
       return false;
     }
-  },
+
+    const userId = authData.user.id;
+
+    // 2. Enregistre les infos dans ta table `users`
+    const { error: dbError } = await supabase
+      .from('users')
+      .upsert({
+        id: userId,
+        email: userData.email!,
+        first_name: userData.firstName!,
+        last_name: userData.lastName!,
+        phone: userData.phone!,
+        company: userData.company!,
+        role: userData.role!,
+        is_verified: false,
+        is_certified: userData.role === 'artisan' ? false : null,
+        created_at: new Date().toISOString(),
+        arrondissements: userData.arrondissements || [],
+        trades: userData.trades || [],
+        completed_projects: 0
+      });
+
+    if (dbError) {
+      console.error('Erreur insertion dans `users` :', dbError);
+      await supabase.auth.signOut(); // rollback de l'auth si erreur
+      set({ isLoading: false });
+      return false;
+    }
+
+    // 3. Récupère le profil à jour depuis la base
+    const userProfile = await getUserProfile(userId);
+    const user = transformDatabaseUser(userProfile);
+
+    // 4. Mets à jour le state local
+    set({
+      user,
+      isAuthenticated: true,
+      isLoading: false
+    });
+
+    localStorage.setItem('mano-pro-user', JSON.stringify(user));
+    return true;
+
+  } catch (error) {
+    console.error('Erreur générale register :', error);
+    set({ isLoading: false });
+    return false;
+  }
+},
+
 
   updateUser: async (userData) => {
     set({ isLoading: true });
