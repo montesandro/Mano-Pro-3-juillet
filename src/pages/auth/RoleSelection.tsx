@@ -1,5 +1,6 @@
 // Role selection page - first step of registration
 // Allows users to choose between Gestionnaire, Artisan, or Admin roles
+// Fixed navigation issue where clicking role cards didn't work properly
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -11,6 +12,7 @@ export const RoleSelection: React.FC = () => {
   const navigate = useNavigate();
 
   const handleRoleSelect = (role: UserRole) => {
+    console.log('Role selected:', role); // Debug log
     navigate('/register', { state: { selectedRole: role } });
   };
 
@@ -77,38 +79,40 @@ export const RoleSelection: React.FC = () => {
           {roles.map((role) => {
             const Icon = role.icon;
             return (
-              <Card
+              <div
                 key={role.id}
-                className="cursor-pointer transform hover:scale-105 transition-all duration-300 hover:shadow-xl border-2 hover:border-blue-200 dark:hover:border-blue-700"
+                className="cursor-pointer transform hover:scale-105 transition-all duration-300"
                 onClick={() => handleRoleSelect(role.id)}
               >
-                <div className="text-center">
-                  <div className={`w-16 h-16 bg-gradient-to-r ${role.color} rounded-2xl flex items-center justify-center mx-auto mb-6`}>
-                    <Icon className="h-8 w-8 text-white" />
+                <Card className="h-full border-2 hover:border-blue-200 dark:hover:border-blue-700 hover:shadow-xl transition-all duration-300">
+                  <div className="text-center h-full flex flex-col">
+                    <div className={`w-16 h-16 bg-gradient-to-r ${role.color} rounded-2xl flex items-center justify-center mx-auto mb-6`}>
+                      <Icon className="h-8 w-8 text-white" />
+                    </div>
+                    
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
+                      {role.title}
+                    </h3>
+                    
+                    <p className="text-gray-600 dark:text-gray-300 mb-6">
+                      {role.description}
+                    </p>
+                    
+                    <ul className="space-y-2 text-left flex-1">
+                      {role.features.map((feature, index) => (
+                        <li key={index} className="flex items-center text-gray-700 dark:text-gray-300">
+                          <div className="w-2 h-2 bg-green-500 rounded-full mr-3 flex-shrink-0"></div>
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                    
+                    <div className={`mt-6 px-6 py-3 bg-gradient-to-r ${role.color} text-white rounded-lg font-medium hover:opacity-90 transition-opacity`}>
+                      Choisir ce rôle
+                    </div>
                   </div>
-                  
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
-                    {role.title}
-                  </h3>
-                  
-                  <p className="text-gray-600 dark:text-gray-300 mb-6">
-                    {role.description}
-                  </p>
-                  
-                  <ul className="space-y-2 text-left">
-                    {role.features.map((feature, index) => (
-                      <li key={index} className="flex items-center text-gray-700 dark:text-gray-300">
-                        <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                  
-                  <div className={`mt-6 px-6 py-3 bg-gradient-to-r ${role.color} text-white rounded-lg font-medium`}>
-                    Choisir ce rôle
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              </div>
             );
           })}
         </div>
