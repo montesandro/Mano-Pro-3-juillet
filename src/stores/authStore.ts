@@ -59,7 +59,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isLoading: true })
 
     try {
-      // 1. Crée l'utilisateur dans Supabase Auth (pas de metadata ici)
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email!,
         password: userData.password
@@ -73,24 +72,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
       const userId = authData.user.id
 
-      // 2. Insère ou met à jour la table public.users
+      // ✅ Version minimale volontaire pour tester l'insertion
       const { error: dbError } = await supabase
         .from('users')
         .upsert({
           id: userId,
           email: userData.email!,
-          first_name: userData.firstName || '',
-          last_name: userData.lastName || '',
-          phone: userData.phone || '',
-          company: userData.company || '',
           role: userData.role!,
-          is_verified: false,
-          is_certified: userData.role === 'artisan' ? false : null,
-          created_at: new Date().toISOString(),
-          arrondissements: userData.arrondissements || [],
-          trades: userData.trades || [],
-          completed_projects: 0
+          created_at: new Date().toISOString()
         })
+
+      console.log('Résultat upsert users:', dbError)
 
       if (dbError) {
         console.error('Erreur insertion users :', dbError)
@@ -99,7 +91,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         return false
       }
 
-      // 3. Récupère le profil à jour
       const userProfile = await getUserProfile(userId)
       const user = transformDatabaseUser(userProfile)
 
@@ -182,7 +173,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   }
 }))
 
-// Auth state listener
 supabase.auth.onAuthStateChange(async (event, session) => {
   if (event === 'SIGNED_OUT' || !session) {
     useAuthStore.getState().setUser(null)
