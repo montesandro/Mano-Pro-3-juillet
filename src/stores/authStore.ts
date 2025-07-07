@@ -2,7 +2,7 @@
 // Manages user authentication state and real database operations
 
 import { create } from 'zustand';
-import { AuthState, User } from '../types';
+import { AuthState, User, transformDatabaseUser } from '../types';
 import { supabase, handleSupabaseError, getUserProfile } from '../lib/supabase';
 
 interface AuthStore extends AuthState {
@@ -44,29 +44,8 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       try {
         const userProfile = await getUserProfile(authData.user.id);
         
-        // Transform database fields to application format
-        const user: User = {
-          id: userProfile.id,
-          email: userProfile.email,
-          firstName: userProfile.first_name,
-          lastName: userProfile.last_name,
-          phone: userProfile.phone,
-          company: userProfile.company,
-          role: userProfile.role,
-          isVerified: userProfile.is_verified,
-          isCertified: userProfile.is_certified,
-          createdAt: new Date(userProfile.created_at),
-          arrondissements: userProfile.arrondissements,
-          trades: userProfile.trades,
-          rating: userProfile.rating,
-          completedProjects: userProfile.completed_projects,
-          avatar: userProfile.avatar,
-          bankDetails: userProfile.bank_details_iban ? {
-            iban: userProfile.bank_details_iban,
-            bic: userProfile.bank_details_bic || '',
-            accountHolder: userProfile.bank_details_account_holder || ''
-          } : undefined
-        };
+        // Transform database fields to application format using utility function
+        const user = transformDatabaseUser(userProfile);
 
         set({ 
           user, 
@@ -247,28 +226,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         // Get user profile
         const userProfile = await getUserProfile(session.user.id);
         
-        const user: User = {
-          id: userProfile.id,
-          email: userProfile.email,
-          firstName: userProfile.first_name,
-          lastName: userProfile.last_name,
-          phone: userProfile.phone,
-          company: userProfile.company,
-          role: userProfile.role,
-          isVerified: userProfile.is_verified,
-          isCertified: userProfile.is_certified,
-          createdAt: new Date(userProfile.created_at),
-          arrondissements: userProfile.arrondissements,
-          trades: userProfile.trades,
-          rating: userProfile.rating,
-          completedProjects: userProfile.completed_projects,
-          avatar: userProfile.avatar,
-          bankDetails: userProfile.bank_details_iban ? {
-            iban: userProfile.bank_details_iban,
-            bic: userProfile.bank_details_bic || '',
-            accountHolder: userProfile.bank_details_account_holder || ''
-          } : undefined
-        };
+        const user = transformDatabaseUser(userProfile);
 
         set({ user, isAuthenticated: true });
         localStorage.setItem('mano-pro-user', JSON.stringify(user));
