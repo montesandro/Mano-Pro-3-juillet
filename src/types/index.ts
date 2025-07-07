@@ -119,7 +119,7 @@ export interface Payment {
   id: string;
   projectId: string; // Maps to project_id in DB
   artisanId: string; // Maps to artisan_id in DB
-  gestionnairId: string; // Maps to gestionnaire_id in DB (note: typo in original, keeping for consistency)
+  gestionnaireId: string; // Maps to gestionnaire_id in DB (fixed typo)
   amount: number; // Amount in euros (stored as integer, cents)
   status: PaymentStatus;
   invoiceUrl?: string; // Maps to invoice_url in DB (nullable)
@@ -285,6 +285,9 @@ export interface DatabaseProject {
   photos_after: string[] | null;
   rating: number | null;
   review: string | null;
+  // For joined data
+  gestionnaire?: DatabaseUser;
+  artisan?: DatabaseUser;
 }
 
 export interface DatabaseTimelineEntry {
@@ -389,7 +392,7 @@ export const transformDatabaseProposal = (dbProposal: DatabaseProposal): Proposa
   createdAt: new Date(dbProposal.created_at)
 });
 
-export const transformDatabaseProject = (dbProject: DatabaseProject & { gestionnaire?: DatabaseUser; artisan?: DatabaseUser }): Project => ({
+export const transformDatabaseProject = (dbProject: DatabaseProject): Project => ({
   id: dbProject.id,
   emergencyId: dbProject.emergency_id,
   proposalId: dbProject.proposal_id,
@@ -436,7 +439,7 @@ export const transformDatabasePayment = (dbPayment: DatabasePayment): Payment =>
   id: dbPayment.id,
   projectId: dbPayment.project_id,
   artisanId: dbPayment.artisan_id,
-  gestionnairId: dbPayment.gestionnaire_id,
+  gestionnaireId: dbPayment.gestionnaire_id, // Fixed typo
   amount: dbPayment.amount,
   status: dbPayment.status,
   invoiceUrl: dbPayment.invoice_url ?? undefined,

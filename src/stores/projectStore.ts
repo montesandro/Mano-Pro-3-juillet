@@ -586,7 +586,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   getPaymentsByUser: (userId, role) => {
     return get().payments.filter(payment => 
-      role === 'gestionnaire' ? payment.gestionnairId === userId : payment.artisanId === userId
+      role === 'gestionnaire' ? payment.gestionnaireId === userId : payment.artisanId === userId
     );
   },
 
