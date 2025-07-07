@@ -2,7 +2,21 @@
 // Handles project lifecycle, chat, timeline, and payment processing with real database operations
 
 import { create } from 'zustand';
-import { Project, ChatMessage, Payment, Invoice, ProjectStatus, PaymentStatus, ProjectTimelineEntry, User } from '../types';
+import { 
+  Project, 
+  ChatMessage, 
+  Payment, 
+  Invoice, 
+  ProjectStatus, 
+  PaymentStatus, 
+  ProjectTimelineEntry, 
+  User,
+  transformDatabaseUser,
+  transformDatabaseProject,
+  transformDatabaseTimelineEntry,
+  transformDatabaseChatMessage,
+  transformDatabasePayment
+} from '../types';
 import { supabase, handleSupabaseError } from '../lib/supabase';
 
 interface ProjectStore {
@@ -36,90 +50,6 @@ interface ProjectStore {
   loadPaymentsByUser: (userId: string, role: string) => Promise<void>;
   generateInvoice: (paymentId: string) => Promise<string>;
 }
-
-// Helper function to transform database user to application format
-const transformUser = (dbUser: any): User => ({
-  id: dbUser.id,
-  email: dbUser.email,
-  firstName: dbUser.first_name,
-  lastName: dbUser.last_name,
-  phone: dbUser.phone,
-  company: dbUser.company,
-  role: dbUser.role,
-  isVerified: dbUser.is_verified,
-  isCertified: dbUser.is_certified,
-  createdAt: new Date(dbUser.created_at),
-  arrondissements: dbUser.arrondissements,
-  trades: dbUser.trades,
-  rating: dbUser.rating,
-  completedProjects: dbUser.completed_projects,
-  avatar: dbUser.avatar,
-  bankDetails: dbUser.bank_details_iban ? {
-    iban: dbUser.bank_details_iban,
-    bic: dbUser.bank_details_bic || '',
-    accountHolder: dbUser.bank_details_account_holder || ''
-  } : undefined
-});
-
-// Helper function to transform database project to application format
-const transformProject = (dbProject: any): Project => ({
-  id: dbProject.id,
-  emergencyId: dbProject.emergency_id,
-  proposalId: dbProject.proposal_id,
-  gestionnaire: transformUser(dbProject.gestionnaire),
-  artisan: transformUser(dbProject.artisan),
-  title: dbProject.title,
-  description: dbProject.description,
-  address: dbProject.address,
-  price: dbProject.price,
-  status: dbProject.status,
-  startDate: dbProject.start_date ? new Date(dbProject.start_date) : undefined,
-  completedDate: dbProject.completed_date ? new Date(dbProject.completed_date) : undefined,
-  photos: {
-    before: dbProject.photos_before || [],
-    during: dbProject.photos_during || [],
-    after: dbProject.photos_after || []
-  },
-  timeline: [], // Will be loaded separately
-  rating: dbProject.rating,
-  review: dbProject.review
-});
-
-// Helper function to transform database timeline entry to application format
-const transformTimelineEntry = (dbEntry: any): ProjectTimelineEntry => ({
-  id: dbEntry.id,
-  type: dbEntry.type,
-  message: dbEntry.message,
-  author: dbEntry.author,
-  timestamp: new Date(dbEntry.timestamp),
-  photos: dbEntry.photos || []
-});
-
-// Helper function to transform database chat message to application format
-const transformChatMessage = (dbMessage: any): ChatMessage => ({
-  id: dbMessage.id,
-  projectId: dbMessage.project_id,
-  senderId: dbMessage.sender_id,
-  senderName: dbMessage.sender_name,
-  message: dbMessage.message,
-  timestamp: new Date(dbMessage.timestamp),
-  photos: dbMessage.photos || [],
-  isRead: dbMessage.is_read
-});
-
-// Helper function to transform database payment to application format
-const transformPayment = (dbPayment: any): Payment => ({
-  id: dbPayment.id,
-  projectId: dbPayment.project_id,
-  artisanId: dbPayment.artisan_id,
-  gestionnairId: dbPayment.gestionnaire_id,
-  amount: dbPayment.amount,
-  status: dbPayment.status,
-  invoiceUrl: dbPayment.invoice_url,
-  createdAt: new Date(dbPayment.created_at),
-  processedAt: dbPayment.processed_at ? new Date(dbPayment.processed_at) : undefined,
-  description: dbPayment.description
-});
 
 // Helper function to upload files to Supabase Storage
 const uploadFiles = async (files: File[], bucket: string, folder: string): Promise<string[]> => {
@@ -227,8 +157,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         id: projectData.id,
         emergencyId,
         proposalId,
-        gestionnaire: transformUser(gestionnaireData),
-        artisan: transformUser(artisanData),
+        gestionnaire: transformDatabaseUser(gestionnaireData),
+        artisan: transformDatabaseUser(artisanData),
         title: projectData.title,
         description: projectData.description,
         address: projectData.address,
@@ -322,7 +252,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (error) throw error;
 
-      const projects = data.map(transformProject);
+      const projects = data.map(transformDatabaseProject);
       
       set({
         projects,
@@ -351,7 +281,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (error) throw error;
 
-      const project = transformProject(data);
+      const project = transformDatabaseProject(data);
       
       set(state => ({
         projects: state.projects.some(p => p.id === id)
@@ -385,7 +315,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (error) throw error;
 
-      const newEntry = transformTimelineEntry(data);
+      const newEntry = transformDatabaseTimelineEntry(data);
 
       set(state => ({
         projects: state.projects.map(project => {
@@ -472,7 +402,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (error) throw error;
 
-      const timeline = data.map(transformTimelineEntry);
+      const timeline = data.map(transformDatabaseTimelineEntry);
 
       set(state => ({
         projects: state.projects.map(project => {
@@ -513,7 +443,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (error) throw error;
 
-      const newMessage = transformChatMessage(data);
+      const newMessage = transformDatabaseChatMessage(data);
       
       set(state => ({
         messages: [newMessage, ...state.messages],
@@ -544,7 +474,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (error) throw error;
 
-      const messages = data.map(transformChatMessage);
+      const messages = data.map(transformDatabaseChatMessage);
       
       set(state => ({
         messages: [
@@ -608,7 +538,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (error) throw error;
 
-      const newPayment = transformPayment(data);
+      const newPayment = transformDatabasePayment(data);
       
       set(state => ({
         payments: [newPayment, ...state.payments],
@@ -674,7 +604,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
       if (error) throw error;
 
-      const payments = data.map(transformPayment);
+      const payments = data.map(transformDatabasePayment);
       
       set({
         payments,

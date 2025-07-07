@@ -2,7 +2,17 @@
 // Handles emergency creation, proposals, and project management with real database operations
 
 import { create } from 'zustand';
-import { Emergency, Proposal, Project, EmergencyStatus, ProposalStatus, User } from '../types';
+import { 
+  Emergency, 
+  Proposal, 
+  Project, 
+  EmergencyStatus, 
+  ProposalStatus, 
+  User,
+  transformDatabaseEmergency,
+  transformDatabaseProposal,
+  transformDatabaseUser
+} from '../types';
 import { supabase, handleSupabaseError } from '../lib/supabase';
 
 interface EmergencyStore {
@@ -33,62 +43,6 @@ interface EmergencyStore {
   getProjectsByUser: (userId: string, role: string) => Project[];
   loadProjectsByUser: (userId: string, role: string) => Promise<void>;
 }
-
-// Helper function to transform database emergency to application format
-const transformEmergency = (dbEmergency: any): Emergency => ({
-  id: dbEmergency.id,
-  title: dbEmergency.title,
-  description: dbEmergency.description,
-  address: dbEmergency.address,
-  arrondissement: dbEmergency.arrondissement,
-  trade: dbEmergency.trade,
-  maxBudget: dbEmergency.max_budget,
-  status: dbEmergency.status,
-  createdBy: dbEmergency.created_by,
-  createdAt: new Date(dbEmergency.created_at),
-  photos: dbEmergency.photos || [],
-  urgencyLevel: dbEmergency.urgency_level,
-  acceptedProposalId: dbEmergency.accepted_proposal_id
-});
-
-// Helper function to transform database proposal to application format
-const transformProposal = (dbProposal: any): Proposal => ({
-  id: dbProposal.id,
-  emergencyId: dbProposal.emergency_id,
-  artisanId: dbProposal.artisan_id,
-  artisanName: dbProposal.artisan_name,
-  artisanCompany: dbProposal.artisan_company,
-  artisanRating: dbProposal.artisan_rating || 0,
-  price: dbProposal.price,
-  description: dbProposal.description,
-  estimatedDuration: dbProposal.estimated_duration,
-  status: dbProposal.status,
-  createdAt: new Date(dbProposal.created_at)
-});
-
-// Helper function to transform database user to application format
-const transformUser = (dbUser: any): User => ({
-  id: dbUser.id,
-  email: dbUser.email,
-  firstName: dbUser.first_name,
-  lastName: dbUser.last_name,
-  phone: dbUser.phone,
-  company: dbUser.company,
-  role: dbUser.role,
-  isVerified: dbUser.is_verified,
-  isCertified: dbUser.is_certified,
-  createdAt: new Date(dbUser.created_at),
-  arrondissements: dbUser.arrondissements,
-  trades: dbUser.trades,
-  rating: dbUser.rating,
-  completedProjects: dbUser.completed_projects,
-  avatar: dbUser.avatar,
-  bankDetails: dbUser.bank_details_iban ? {
-    iban: dbUser.bank_details_iban,
-    bic: dbUser.bank_details_bic || '',
-    accountHolder: dbUser.bank_details_account_holder || ''
-  } : undefined
-});
 
 export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
   emergencies: [],
@@ -121,7 +75,7 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
         throw error;
       }
 
-      const newEmergency = transformEmergency(data);
+      const newEmergency = transformDatabaseEmergency(data);
       
       set(state => ({
         emergencies: [newEmergency, ...state.emergencies],
@@ -182,7 +136,7 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
         throw error;
       }
 
-      const emergencies = data.map(transformEmergency);
+      const emergencies = data.map(transformDatabaseEmergency);
       
       set(state => ({
         emergencies: emergencies,
@@ -210,7 +164,7 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
         throw error;
       }
 
-      const emergency = transformEmergency(data);
+      const emergency = transformDatabaseEmergency(data);
       
       set(state => ({
         emergencies: state.emergencies.some(e => e.id === id)
@@ -249,7 +203,7 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
         throw error;
       }
 
-      const newProposal = transformProposal(data);
+      const newProposal = transformDatabaseProposal(data);
       
       set(state => ({
         proposals: [newProposal, ...state.proposals],
@@ -319,7 +273,7 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
         throw error;
       }
 
-      const proposals = data.map(transformProposal);
+      const proposals = data.map(transformDatabaseProposal);
       
       set(state => ({
         proposals: [
@@ -350,7 +304,7 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
         throw error;
       }
 
-      const proposals = data.map(transformProposal);
+      const proposals = data.map(transformDatabaseProposal);
       
       set(state => ({
         proposals: [
@@ -447,8 +401,8 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
         });
 
       // Transform users and create project object
-      const gestionnaire = transformUser(gestionnaireData);
-      const artisan = transformUser(artisanData);
+      const gestionnaire = transformDatabaseUser(gestionnaireData);
+      const artisan = transformDatabaseUser(artisanData);
 
       const newProject: Project = {
         id: projectData.id,
@@ -582,8 +536,8 @@ export const useEmergencyStore = create<EmergencyStore>((set, get) => ({
         id: projectData.id,
         emergencyId: projectData.emergency_id,
         proposalId: projectData.proposal_id,
-        gestionnaire: transformUser(projectData.gestionnaire),
-        artisan: transformUser(projectData.artisan),
+        gestionnaire: transformDatabaseUser(projectData.gestionnaire),
+        artisan: transformDatabaseUser(projectData.artisan),
         title: projectData.title,
         description: projectData.description,
         address: projectData.address,
