@@ -172,12 +172,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         set({ isLoading: false });
         return false;
       }
-    } catch (error) {
-      console.error('Registration error:', error instanceof Error ? error.message : error);
-      set({ isLoading: false });
-      return false;
-    }
-  },
 
       // Create user object for state
       const newUser: User = {
