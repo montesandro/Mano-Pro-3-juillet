@@ -65,6 +65,13 @@ export const Register: React.FC = () => {
       return;
     }
     
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Veuillez entrer une adresse email valide');
+      return;
+    }
+    
     if (formData.password !== formData.confirmPassword) {
       setError('Les mots de passe ne correspondent pas');
       return;
@@ -85,11 +92,16 @@ export const Register: React.FC = () => {
       return;
     }
     
-    const success = await register(formData);
-    if (success) {
-      navigate('/dashboard');
-    } else {
-      setError('Erreur lors de l\'inscription');
+    try {
+      const success = await register(formData);
+      if (success) {
+        navigate('/dashboard');
+      } else {
+        setError('Erreur lors de l\'inscription. Veuillez vérifier vos informations et réessayer.');
+      }
+    } catch (error) {
+      console.error('Registration submission error:', error);
+      setError('Une erreur inattendue s\'est produite. Veuillez réessayer dans quelques instants.');
     }
   };
 

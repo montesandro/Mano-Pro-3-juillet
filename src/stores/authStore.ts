@@ -82,25 +82,47 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isLoading: true });
     
     try {
+      // First check if user already exists
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('email')
+        .eq('email', userData.email!)
+        .single();
+
+      if (existingUser) {
+        console.error('User already exists with this email');
+        set({ isLoading: false });
+        return false;
+      }
+
       // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email!,
         password: userData.password,
         options: {
-          emailRedirectTo: undefined // Disable email confirmation for now
+          emailRedirectTo: undefined, // Disable email confirmation for now
+          data: {
+            first_name: userData.firstName,
+            last_name: userData.lastName,
+            role: userData.role
+          }
         }
       });
 
       if (authError) {
-        console.error('Registration auth error:', authError);
+        console.error('Registration auth error:', authError.message || authError);
         set({ isLoading: false });
         return false;
       }
 
       if (!authData.user) {
+        console.error('No user returned from auth signup');
         set({ isLoading: false });
         return false;
       }
+
+      // Wait a moment for auth user to be fully created
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
       // Create user profile in users table
       const { error: profileError } = await supabase
@@ -121,9 +143,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         });
 
       if (profileError) {
-        console.error('Registration profile error:', profileError);
+        console.error('Registration profile error:', profileError.message || profileError);
         // Clean up auth user if profile creation failed
-        await supabase.auth.signOut();
+        try {
+          await supabase.auth.signOut();
+        } catch (cleanupError) {
+          console.error('Error during cleanup:', cleanupError);
+        }
         set({ isLoading: false });
         return false;
       }
@@ -154,7 +180,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       localStorage.setItem('mano-pro-user', JSON.stringify(newUser));
       return true;
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('Registration error:', error instanceof Error ? error.message : error);
       set({ isLoading: false });
       return false;
     }
